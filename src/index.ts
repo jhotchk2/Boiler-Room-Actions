@@ -29,4 +29,6 @@ app.get('/supabase', async (req, res) => {
   res.json(rows)
 })
 
+
+
 export default app
