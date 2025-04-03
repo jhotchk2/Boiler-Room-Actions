@@ -1,5 +1,7 @@
 import pg from 'pg'
 import puppeteer from "puppeteer"
+import express from 'express';
+const router = express.Router()
 
 const { Pool } = pg
 
@@ -7,6 +9,17 @@ const pool = new Pool({
   connectionString: process.env.DB_URL,
 });
 pool.connect();
+
+router.put('/:steamId', (req, res) => {
+  const steamId = req.params.steamId
+  try {
+    hltbUpdate(steamId)
+    res.sendStatus(201)
+  } catch (err) {
+    console.log(err)
+    res.status(500).json({error: 'Error fetching HLTB scores'})
+  }
+})
 
 //function to update hltb scores for games in users library
 export async function hltbUpdate (id) {
