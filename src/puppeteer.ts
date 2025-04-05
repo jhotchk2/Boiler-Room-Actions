@@ -1,8 +1,10 @@
 import pg from 'pg'
+import dotenv from 'dotenv'
 import puppeteer from "puppeteer"
 import express from 'express';
 const router = express.Router()
 
+dotenv.config()
 const { Pool } = pg
 
 const pool = new Pool({
@@ -10,10 +12,10 @@ const pool = new Pool({
 });
 pool.connect();
 
-router.put('/:steamId', (req, res) => {
+router.put('/:steamId', async (req, res) => {
   const steamId = req.params.steamId
   try {
-    hltbUpdate(steamId)
+    await hltbUpdate(steamId)
     res.sendStatus(201)
   } catch (err) {
     console.log(err)
@@ -108,3 +110,5 @@ async function boil_rating(hltb_score, rating, quality_weight) {
 
   return boil_rating
 }
+
+export default router
