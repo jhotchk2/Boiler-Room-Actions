@@ -83,11 +83,17 @@ export async function hltbUpdate (id) {
 
 //Function to return "boil rating" based on
 async function boil_rating(hltb_score, rating, quality_weight) {
-  if (!hltb_score) return null //if no length available, return null
   quality_weight = quality_weight || 0.75 //the percentage that rating matters over length, 75% by default if null/falsy
 
+  let lengthFactor : any;
+
+  //if no length available, lengthfactor is assigned halfway between worst possible and average
+  if (!hltb_score) lengthFactor = 2.5;
+
   //calculate a lengthFactor based on the hltb score, ex. 0.1hrs -> ~10LF, 18 hrs (avg game) -> ~5LF, 100hrs -> ~0LF
-  const lengthFactor = 10 * Math.exp(-1 * (Math.log(5) / 18) * (hltb_score - 0.1))
+  else {
+    lengthFactor = 10 * Math.exp(-1 * (Math.log(5) / 18) * (hltb_score - 0.1))
+  }
 
   //calculate boil rating
   const boil_rating: number = +(
