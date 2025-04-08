@@ -55,7 +55,7 @@ export async function delay() {
 
 app.get('/load', async (req: Request, res: Response) => {
   try {
-    const { rows } = await pool.query('SELECT * FROM "Buffer_Games"');
+    const { rows } = await pool.query('SELECT * FROM "Buffer_Games" LIMIT 100');
     
     if (!rows || rows.length === 0) {
       res.status(404).json({ message: 'No games found in Buffer_Games' });
