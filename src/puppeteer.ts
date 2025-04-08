@@ -10,6 +10,19 @@ const pool = new Pool({
 });
 pool.connect();
 
+export async function getHltbAndBoil() {
+  const { rows } = await pool.query(`SELECT * from "Buffer_Profiles"`)
+  try {
+    for (const profile of rows) {
+      await hltbUpdate(profile.steam_id)
+    }
+  } catch (err) {
+    console.log(err)
+  } finally {
+    await pool.query(`DELETE FROM "Buffer_Profiles"`)
+  }
+}
+
 //function to update hltb scores for games in users library
 export async function hltbUpdate (id) {
   const url = (`https://howlongtobeat.com/steam?userName=${id}`)
@@ -63,10 +76,9 @@ export async function hltbUpdate (id) {
          FROM "Games" WHERE "game_id" = $1`,
         [game[0]]
       )
-
       const boil_score = rows[0]?.metacritic_score
-        ? await boil_rating(game[1], rows[0]?.metacritic_score, 0.75)
-        : null
+      ? await boil_rating(game[1], rows[0]?.metacritic_score, 0.75)
+      : null
       await pool.query(
         `UPDATE "Games" SET hltb_score = $1, boil_score = $2 WHERE game_id = $3`,
         [game[1], boil_score, game[0]]

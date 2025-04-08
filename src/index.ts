@@ -2,7 +2,7 @@ import express from "express"
 import dotenv from 'dotenv'
 import cors from 'cors'
 import pg from 'pg'
-import { hltbUpdate } from './puppeteer'
+import { getHltbAndBoil, hltbUpdate } from './puppeteer'
 import axios from "axios"
 
 const app = express()
@@ -31,17 +31,16 @@ app.get('/status', (req, res) => {
 })
 
 app.get('/cronjob', async (req, res) => {
-  const response = await axios.get(process.env.URL + '/status')
-  if (response.data == 'online') {
-    console.log(response.data)
-    const steamId = '76561199509790498' // jack
-     try {
-        await hltbUpdate(steamId)
-        res.sendStatus(201)
-      } catch (err) {
-        console.log(err)
-        res.status(500).json({error: 'Error fetching HLTB scores'})
-      }
+  const { data: status } = await axios.get(process.env.URL + '/status')
+  if (status == 'online') {
+    try {
+      // function to update games can go here
+      await getHltbAndBoil()
+      res.sendStatus(201)
+    } catch (err) {
+      console.error(err)
+      res.status(500).json({error: 'Error fetching HLTB scores'})
+    }
   }
 })
 
