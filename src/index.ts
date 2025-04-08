@@ -62,9 +62,8 @@ app.get('/load', async (req: Request, res: Response) => {
       return;
     }
 
-    // Use game_id instead of steam_id
     const appIds = rows.map(row => {
-      const appid = Number(row.game_id); // Changed from steam_id to game_id
+      const appid = Number(row.game_id);
       if (isNaN(appid)) {
         console.warn(`Invalid game_id format: ${row.game_id}`);
       }
@@ -82,7 +81,6 @@ app.get('/load', async (req: Request, res: Response) => {
 
     console.log(`Attempting to fetch data for ${appIds.length} games from Steam API`);
     
-    // Rest of your existing code remains exactly the same...
     const gameDataPromises = appIds.map(async (appid) => {
       try {
         console.log(`Fetching data for appid: ${appid}`);
@@ -194,10 +192,60 @@ app.get('/load', async (req: Request, res: Response) => {
 
         await insertGameData(processedGameData);
         
+        let reviewData = null;
+        try {
+          const reviewsResponse = await axios.get(
+            `https://store.steampowered.com/appreviews/${appid}`,
+            {
+              params: {
+                json: 1,
+                language: 'english',
+                filter: 'all',
+                purchase_type: 'all'
+              }
+            }
+          );
+          
+          await delay();
+          
+          if (reviewsResponse.data && reviewsResponse.data.success > 0) {
+            reviewData = {
+              review_score_desc: reviewsResponse.data.query_summary.review_score_desc,
+              total_positive: reviewsResponse.data.query_summary.total_positive,
+              total_negative: reviewsResponse.data.query_summary.total_negative,
+              total_reviews: reviewsResponse.data.query_summary.total_reviews
+            };
+            
+            await pool.query(
+              `INSERT INTO "Game_Recommendations" 
+               ("game_id", "total", "positive", "negative", "description") 
+               VALUES ($1, $2, $3, $4, $5)
+               ON CONFLICT ("game_id") DO UPDATE SET
+               "total" = EXCLUDED."total",
+               "positive" = EXCLUDED."positive",
+               "negative" = EXCLUDED."negative",
+               "description" = EXCLUDED."description"`,
+              [
+                appid,
+                reviewData.total_reviews,
+                reviewData.total_positive,
+                reviewData.total_negative,
+                reviewData.review_score_desc
+              ]
+            );
+          }
+        } catch (reviewError) {
+          console.error(`Failed to fetch reviews for appid ${appid}:`, reviewError);
+          reviewData = {
+            error: reviewError instanceof Error ? reviewError.message : 'Unknown review error'
+          };
+        }
+
         await pool.query('DELETE FROM "Buffer_Games" WHERE game_id = $1', [appid]);
         
         return {
           ...processedGameData,
+          review_data: reviewData,
           status: 'success'
         };
          
@@ -215,8 +263,7 @@ app.get('/load', async (req: Request, res: Response) => {
           } : null
         });
         
-        // Don't delete from Buffer_Games if it's a temporary error
-        const shouldDeleteFromBuffer = error.response?.status !== 429; // Don't delete if rate limited
+        const shouldDeleteFromBuffer = error.response?.status !== 429;
         
         if (shouldDeleteFromBuffer) {
           await pool.query('DELETE FROM "Buffer_Games" WHERE game_id = $1', [appid]);
@@ -234,7 +281,6 @@ app.get('/load', async (req: Request, res: Response) => {
 
     const gameData = await Promise.all(gameDataPromises);
     
-    // Separate successful and failed requests
     const successful = gameData.filter(g => !g.error);
     const failed = gameData.filter(g => g.error);
     
