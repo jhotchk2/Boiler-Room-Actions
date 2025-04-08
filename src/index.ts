@@ -34,7 +34,7 @@ app.get('/cronjob', async (req, res) => {
   const { data: status } = await axios.get(process.env.URL + '/status')
   if (status == 'online') {
     try {
-      // function to update games can go here
+      await loadGames()
       await getHltbAndBoil()
       res.sendStatus(201)
     } catch (err) {
@@ -53,12 +53,12 @@ export async function delay() {
   return new Promise( resolve => setTimeout(resolve, 2000) ); //set a 2 second delay for the API
 }
 
-app.get('/load', async (req: Request, res: Response) => {
+async function loadGames() {
   try {
     const { rows } = await pool.query('SELECT * FROM "Buffer_Games" LIMIT 100');
     
     if (!rows || rows.length === 0) {
-      res.status(404).json({ message: 'No games found in Buffer_Games' });
+      console.log('No games found in Buffer_Games');
       return;
     }
 
@@ -71,7 +71,7 @@ app.get('/load', async (req: Request, res: Response) => {
     }).filter(appid => !isNaN(appid));
 
     if (appIds.length === 0) {
-      res.status(400).json({ 
+      console.log({ 
         message: 'No valid game_ids found in Buffer_Games',
         totalEntries: rows.length,
         invalidEntries: rows.length - appIds.length
@@ -286,7 +286,7 @@ app.get('/load', async (req: Request, res: Response) => {
     
     console.log(`Processed ${gameData.length} games: ${successful.length} success, ${failed.length} failed`);
     
-    res.json({ 
+    console.log({ 
       success: true, 
       count: {
         total: gameData.length,
@@ -301,13 +301,13 @@ app.get('/load', async (req: Request, res: Response) => {
       error: error instanceof Error ? error.stack : error,
       timestamp: new Date().toISOString()
     });
-    res.status(500).json({ 
+    console.log({ 
       success: false, 
       error: 'Internal server error',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
   }
-});
+};
 
 async function insertGameData(gameData) {
   try {
