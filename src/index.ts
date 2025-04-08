@@ -49,31 +49,95 @@ app.get('/supabase', async (req, res) => {
   res.json(rows)
 })
 
+export async function delay() {
+  return new Promise( resolve => setTimeout(resolve, 2000) ); //set a 2 second delay for the API
+}
+
 app.get('/load', async (req: Request, res: Response) => {
   try {
-    const { rows } = await pool.query('SELECT * FROM "Buffer"');
+    const { rows } = await pool.query('SELECT * FROM "Buffer_Games"');
     
     if (!rows || rows.length === 0) {
-      res.status(404).json({ message: 'No games found in Buffer' });
+      res.status(404).json({ message: 'No games found in Buffer_Games' });
       return;
     }
 
-    const appIds = rows.map(row => row.steam_id);
+    // Use game_id instead of steam_id
+    const appIds = rows.map(row => {
+      const appid = Number(row.game_id); // Changed from steam_id to game_id
+      if (isNaN(appid)) {
+        console.warn(`Invalid game_id format: ${row.game_id}`);
+      }
+      return appid;
+    }).filter(appid => !isNaN(appid));
+
+    if (appIds.length === 0) {
+      res.status(400).json({ 
+        message: 'No valid game_ids found in Buffer_Games',
+        totalEntries: rows.length,
+        invalidEntries: rows.length - appIds.length
+      });
+      return;
+    }
+
+    console.log(`Attempting to fetch data for ${appIds.length} games from Steam API`);
+    
+    // Rest of your existing code remains exactly the same...
     const gameDataPromises = appIds.map(async (appid) => {
       try {
+        console.log(`Fetching data for appid: ${appid}`);
+        
         const response = await axios.get(
           'https://store.steampowered.com/api/appdetails',
-          { params: { appids: appid } }
+          {
+            params: { 
+              appids: appid,
+              l: 'english'
+            }
+          }
         );
 
-        const gameData = response.data?.[appid]?.data;
-        if (!gameData || !response.data?.[appid]?.success) {
-          // Remove from Buffer even if API response is invalid
-          await pool.query('DELETE FROM "Buffer" WHERE steam_id = $1', [appid]);
+        await delay();
+
+        console.log(`Response for appid ${appid}:`, {
+          status: response.status,
+          statusText: response.statusText,
+          data: response.data
+        });
+
+        if (!response.data || !response.data[appid]) {
+          console.error(`Invalid response structure for appid ${appid}`);
+          await pool.query('DELETE FROM "Buffer_Games" WHERE game_id = $1', [appid]);
           return {
             appid,
             name: 'Unknown',
-            error: 'Invalid API response'
+            error: 'Invalid API response structure',
+            status: response.status
+          };
+        }
+
+        const apiResponse = response.data[appid];
+        if (!apiResponse.success) {
+          console.error(`API reported failure for appid ${appid}:`, apiResponse);
+          await pool.query('DELETE FROM "Buffer_Games" WHERE game_id = $1', [appid]);
+          return {
+            appid,
+            name: 'Unknown',
+            error: 'Steam API reported failure',
+            status: response.status,
+            apiError: apiResponse
+          };
+        }
+
+        const gameData = apiResponse.data;
+        if (!gameData) {
+          console.error(`No game data in response for appid ${appid}`);
+          await pool.query('DELETE FROM "Buffer_Games" WHERE game_id = $1', [appid]);
+          return {
+            appid,
+            name: 'Unknown',
+            error: 'No game data in API response',
+            status: response.status
           };
         }
 
@@ -128,36 +192,73 @@ app.get('/load', async (req: Request, res: Response) => {
           dlcs: gameData.dlc ? gameData.dlc.map((id: string | number) => Number(id)) : []
         };
 
-        // Insert the game data into the database
         await insertGameData(processedGameData);
         
-        // Only delete from Buffer after successful insertion
-        await pool.query('DELETE FROM "Buffer" WHERE steam_id = $1', [appid]);
+        await pool.query('DELETE FROM "Buffer_Games" WHERE game_id = $1', [appid]);
         
-        return processedGameData;
+        return {
+          ...processedGameData,
+          status: 'success'
+        };
          
       } catch (error) {
-        console.error(`Error for appid ${appid}:`, error);
+        console.error(`Error processing appid ${appid}:`, {
+          error: error instanceof Error ? error.stack : error,
+          request: error.config ? {
+            url: error.config.url,
+            params: error.config.params,
+            headers: error.config.headers
+          } : null,
+          response: error.response ? {
+            status: error.response.status,
+            data: error.response.data
+          } : null
+        });
+        
+        // Don't delete from Buffer_Games if it's a temporary error
+        const shouldDeleteFromBuffer = error.response?.status !== 429; // Don't delete if rate limited
+        
+        if (shouldDeleteFromBuffer) {
+          await pool.query('DELETE FROM "Buffer_Games" WHERE game_id = $1', [appid]);
+        }
+        
         return { 
           appid,
           name: 'Error fetching data',
-          error: error instanceof Error ? error.message : 'Unknown error'
+          error: error instanceof Error ? error.message : 'Unknown error',
+          statusCode: error.response?.status,
+          shouldRetry: error.response?.status === 429
         };
       }
     });
 
     const gameData = await Promise.all(gameDataPromises);
     
+    // Separate successful and failed requests
+    const successful = gameData.filter(g => !g.error);
+    const failed = gameData.filter(g => g.error);
+    
+    console.log(`Processed ${gameData.length} games: ${successful.length} success, ${failed.length} failed`);
+    
     res.json({ 
       success: true, 
-      count: gameData.length, 
-      games: gameData 
+      count: {
+        total: gameData.length,
+        success: successful.length,
+        failed: failed.length
+      },
+      successful,
+      failed
     });
   } catch (error) {
-    console.error('Error in /load endpoint:', error);
+    console.error('Critical error in /load endpoint:', {
+      error: error instanceof Error ? error.stack : error,
+      timestamp: new Date().toISOString()
+    });
     res.status(500).json({ 
       success: false, 
-      error: 'Internal server error' 
+      error: 'Internal server error',
+      details: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 });
