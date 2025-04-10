@@ -49,8 +49,8 @@ app.get('/supabase', async (req, res) => {
   res.json(rows)
 })
 
-export async function delay() {
-  return new Promise( resolve => setTimeout(resolve, 2000) ); //set a 2 second delay for the API
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 async function loadGames() {
@@ -95,7 +95,16 @@ async function loadGames() {
           }
         );
 
-        await delay();
+        for (let i = 0; i < 3; i++) {
+          const iterationStart = Date.now();
+          console.log(`Starting iteration ${i} at ${new Date(iterationStart).toISOString()}`);
+          
+          await sleep(i * 1000);
+          
+          const iterationEnd = Date.now();
+          const iterationElapsed = (iterationEnd - iterationStart) / 1000;
+          console.log(`Iteration ${i} completed in ${iterationElapsed.toFixed(2)} seconds`);
+      }
 
         console.log(`Response for appid ${appid}:`, {
           status: response.status,
@@ -206,7 +215,16 @@ async function loadGames() {
             }
           );
           
-          await delay();
+          for (let i = 0; i < 3; i++) {
+            const iterationStart = Date.now();
+            console.log(`Starting iteration ${i} at ${new Date(iterationStart).toISOString()}`);
+            
+            await sleep(i * 1000);
+            
+            const iterationEnd = Date.now();
+            const iterationElapsed = (iterationEnd - iterationStart) / 1000;
+            console.log(`Iteration ${i} completed in ${iterationElapsed.toFixed(2)} seconds`);
+        }
           
           if (reviewsResponse.data && reviewsResponse.data.success > 0) {
             reviewData = {
