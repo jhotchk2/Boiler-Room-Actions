@@ -1,0 +1,33 @@
+name: Trigger Render Cronjob
+
+on:
+  schedule:
+    - cron: '45 4 * * *' # Wake-up ping at 4:40 UTC
+    - cron: '50 4 * * *' # Actual cronjob at 4:45 UTC
+
+jobs:
+  wakeup:
+    if: github.event.schedule == '40 4 * * *'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping /status to wake up the service
+        run: |
+          curl -s -o /dev/null -w "%{http_code}" https://boiler-room-actions.onrender.com/status
+
+  run-cronjob:
+    if: github.event.schedule == '45 4 * * *'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call /cronjob with retry
+        run: |
+          for i in {1..5}; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" https://boiler-room-actions.onrender.com/cronjob)
+            echo "Status: $code"
+            if [ "$code" -eq "200" ]; then
+              echo "✅ Success"
+              break
+            else
+              echo "⏳ Retry in 10s..."
+              sleep 10
+            fi
+          done
