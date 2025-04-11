@@ -33,7 +33,7 @@ app.get('/renderStatus', async (req, res) => {
 
   for (let i = 0; i < MAX_RETRIES; i++) {
     try {
-      const response = await axios.get(url, { timeout: 8000 });
+      const response = await axios.get(url);
 
       if (response.status === 200 && response.data === 'online') {
         res.status(200).send('Render app is online');
