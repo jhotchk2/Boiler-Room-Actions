@@ -27,9 +27,30 @@ app.get('/', (req: Request, res: Response) => {
 })
 
 app.get('/renderStatus', async (req, res) => {
-  const { data: status } = await axios.get(process.env.RENDER_URL + '/status')
-  console.log('Render is ' + status)
-})
+  const MAX_RETRIES = 20;
+  const DELAY_MS = 8000; // 10 seconds
+  const url = 'https://boiler-room-actions.onrender.com/status';
+
+  for (let i = 0; i < MAX_RETRIES; i++) {
+    try {
+      const response = await axios.get(url, { timeout: 8000 });
+
+      if (response.status === 200 && response.data === 'online') {
+        res.status(200).send('Render app is online');
+        return
+      } else {
+        console.log(`Attempt ${i + 1}: got status ${response.status}, retrying...`);
+      }
+    } catch (err) {
+      console.log(`Attempt ${i + 1} failed:`, err.message);
+    }
+
+    await new Promise(resolve => setTimeout(resolve, DELAY_MS));
+  }
+
+  res.status(504).send('Render app did not respond in time');
+  return
+});
 
 app.get('/status', (req, res) => {
   res.status(200).send('online')
