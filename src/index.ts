@@ -26,21 +26,23 @@ app.get('/', (req: Request, res: Response) => {
   res.status(200).json({message: 'hello'})
 })
 
+app.get('/renderStatus', async (req, res) => {
+  const { data: status } = await axios.get(process.env.RENDER_URL + '/status')
+  console.log('Render is ' + status)
+})
+
 app.get('/status', (req, res) => {
   res.status(200).send('online')
 })
 
 app.get('/cronjob', async (req, res) => {
-  const { data: status } = await axios.get(process.env.URL + '/status')
-  if (status == 'online') {
-    try {
-      await loadGames()
-      await getHltbAndBoil()
-      res.sendStatus(201)
-    } catch (err) {
-      console.error(err)
-      res.status(500).json({error: 'Error fetching HLTB scores'})
-    }
+  try {
+    await loadGames()
+    await getHltbAndBoil()
+    res.sendStatus(201)
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({error: 'Error fetching HLTB scores'})
   }
 })
 
